@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <title>Precificação Essencial</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <style>
+    body {
+      font-family: Arial;
+      background: #111;
+      color: #fff;
+      padding: 20px;
+    }
+
+    h2 {
+      color: #00ff88;
+    }
+
+    input, select, button {
+      display: block;
+      margin: 10px 0;
+      padding: 10px;
+      width: 100%;
+      border-radius: 8px;
+      border: none;
+    }
+
+    button {
+      background: #00ff88;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    #resultado {
+      font-size: 20px;
+      margin-top: 20px;
+    }
+
+    #alerta {
+      margin-top: 10px;
+      color: #ff4d4d;
+      font-weight: bold;
+    }
+
+    canvas {
+      margin-top: 20px;
+      background: #fff;
+      border-radius: 10px;
+      padding: 10px;
+    }
+  </style>
+</head>
+
+<body>
+
+  <h2>📊 Precificação Essencial</h2>
+
+  <input id="fixos" placeholder="Custos Fixos (R$)" oninput="formatarMoeda(this)">
+  <input id="variaveis" placeholder="Custos Variáveis (R$)" oninput="formatarMoeda(this)">
+  <input id="extras" placeholder="Custos Extras (R$)" oninput="formatarMoeda(this)">
+  <input id="frete" placeholder="Frete por unidade (R$)" oninput="formatarMoeda(this)">
+
+  <!-- IMPOSTO -->
+  <select id="tipoImposto" onchange="alternarImposto()">
+    <option value="mei">MEI (DAS)</option>
+    <option value="percentual">Tributação (%)</option>
+  </select>
+
+  <input id="das" placeholder="Valor mensal do DAS (R$)" oninput="formatarMoeda(this)">
+
+  <select id="imposto" style="display:none;">
+    <option value="0">0%</option>
+    <option value="4">4%</option>
+    <option value="8">8%</option>
+  </select>
+
+  <input id="renda" placeholder="Quanto quer ganhar no mês (R$)" oninput="formatarMoeda(this)">
+  <input id="quantidade" placeholder="Qtd de vendas/atendimentos" type="number">
+  <input id="margem" placeholder="Margem (%)" type="number">
+
+  <button onclick="calcular()">Calcular</button>
+
+  <div id="resultado"></div>
+  <div id="alerta"></div>
+
+  <canvas id="grafico"></canvas>
+
+<script>
+let grafico;
+
+function alternarImposto() {
+  const tipo = document.getElementById("tipoImposto").value;
+
+  document.getElementById("das").style.display =
+    tipo === "mei" ? "block" : "none";
+
+  document.getElementById("imposto").style.display =
+    tipo === "percentual" ? "block" : "none";
+}
+
+// MÁSCARA DE MOEDA
+function formatarMoeda(input) {
+  let valor = input.value.replace(/\D/g, "");
+  valor = (valor / 100).toFixed(2) + "";
+  valor = valor.replace(".", ",");
+  valor = valor.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  input.value = "R$ " + valor;
+}
+
+// CONVERSÃO
+function parseMoeda(valor) {
+  return parseFloat(
+    valor.replace("R$", "")
+         .replace(/\./g, "")
+         .replace(",", ".")
+  ) || 0;
+}
+
+function calcular() {
+  const fixos = parseMoeda(document.getElementById("fixos").value);
+  const variaveis = parseMoeda(document.getElementById("variaveis").value);
+  const extras = parseMoeda(document.getElementById("extras").value);
+  const frete = parseMoeda(document.getElementById("frete").value);
+  const renda = parseMoeda(document.getElementById("renda").value);
+
+  const quantidade = parseFloat(document.getElementById("quantidade").value) || 1;
+  const margem = parseFloat(document.getElementById("margem").value) || 0;
+
+  const tipo = document.getElementById("tipoImposto").value;
+
+  const custoTotal = fixos + variaveis + extras;
+  const custoPorUnidade = (custoTotal / quantidade) + frete;
+
+  let impostoPorUnidade = 0;
+
+  if (tipo === "mei") {
+    const das = parseMoeda(document.getElementById("das").value);
+    impostoPorUnidade = das / quantidade;
+  } else {
+    const imposto = parseFloat(document.getElementById("imposto").value) || 0;
+    impostoPorUnidade = custoPorUnidade * (imposto / 100);
+  }
+
+  const salarioPorUnidade = renda / quantidade;
+
+  const precoBase = custoPorUnidade + salarioPorUnidade + impostoPorUnidade;
+  const precoFinal = precoBase * (1 + margem / 100);
+
+  document.getElementById("resultado").innerText =
+    "💰 Preço ideal: R$ " + precoFinal.toLocaleString("pt-BR", {minimumFractionDigits: 2});
+
+  gerarAlerta(precoFinal, custoPorUnidade, margem, impostoPorUnidade);
+  gerarGrafico(custoPorUnidade, salarioPorUnidade, precoFinal);
+}
+
+function gerarAlerta(preco, custo, margem, imposto) {
+  let msg = "";
+
+  if (preco <= custo) {
+    msg = "⚠️ Você está pagando para trabalhar!";
+  } else if (margem < 10) {
+    msg = "⚠️ Margem muito baixa. Negócio em risco.";
+  } else if (imposto > 0 && margem < 15) {
+    msg = "⚠️ Imposto + margem baixa = prejuízo escondido.";
+  } else {
+    msg = "✅ Preço saudável.";
+  }
+
+  document.getElementById("alerta").innerText = msg;
+}
+
+function gerarGrafico(custo, salario, preco) {
+  const ctx = document.getElementById('grafico').getContext('2d');
+
+  if (grafico) {
+    grafico.destroy();
+  }
+
+  grafico = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: ['Custo', 'Salário', 'Preço Final'],
+      datasets: [{
+        label: 'Distribuição',
+        data: [custo, salario, preco]
+      }]
+    }
+  });
+}
+</script>
+
+</body>
+</html>
